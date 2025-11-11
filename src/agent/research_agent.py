@@ -1,32 +1,51 @@
 """
 Main Research Agent implementation using LangChain.
-Orchestrates web search and content analysis to produce research reports.
+Uses absolute imports to avoid relative import issues.
 """
+
+import os
+import sys
+
+# Add the necessary paths for imports
+current_dir = os.path.dirname(__file__)
+tools_dir = os.path.join(current_dir, '..', 'tools')
+utils_dir = os.path.join(current_dir, '..', 'utils')
+
+sys.path.insert(0, tools_dir)
+sys.path.insert(0, utils_dir)
 
 from langchain.agents import AgentType, initialize_agent
 from langchain.agents.agent_toolkits import Tool
 from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage
 from langchain.memory import ConversationBufferMemory
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from ..tools.web_search import web_search_tool
-from ..tools.web_scraper import web_scraper_tool
-from ..utils.config import config
+try:
+    from web_search import web_search_tool
+    from web_scraper import web_scraper_tool
+    from config import config
+except ImportError as e:
+    print(f"Import error: {e}")
+    # Fallback: try direct import
+    import importlib.util
+    def import_from_path(module_path, module_name):
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    
+    web_search_module = import_from_path(os.path.join(tools_dir, 'web_search.py'), 'web_search')
+    web_scraper_module = import_from_path(os.path.join(tools_dir, 'web_scraper.py'), 'web_scraper')
+    config_module = import_from_path(os.path.join(utils_dir, 'config.py'), 'config')
+    
+    web_search_tool = web_search_module.web_search_tool
+    web_scraper_tool = web_scraper_module.web_scraper_tool
+    config = config_module.config
 
 class ResearchAgent:
     """
     An AI agent that performs automated research on given topics.
-    
-    The agent can search the web, read articles, and compile comprehensive
-    reports with citations. It uses a reasoning loop to decide when to
-    search, when to read, and when to synthesize information.
-    
-    Attributes:
-        llm (ChatOpenAI): The language model powering the agent
-        memory (ConversationBufferMemory): Conversation memory
-        tools (list): List of available tools
-        agent: The LangChain agent instance
     """
     
     def __init__(self):
@@ -37,12 +56,7 @@ class ResearchAgent:
         self.agent = self._setup_agent()
     
     def _setup_llm(self) -> ChatOpenAI:
-        """
-        Configure and initialize the language model.
-        
-        Returns:
-            ChatOpenAI: Configured ChatOpenAI instance
-        """
+        """Configure and initialize the language model."""
         return ChatOpenAI(
             model=config.model_name,
             temperature=config.temperature,
@@ -50,12 +64,7 @@ class ResearchAgent:
         )
     
     def _setup_memory(self) -> ConversationBufferMemory:
-        """
-        Initialize conversation memory for context retention.
-        
-        Returns:
-            ConversationBufferMemory: Conversation memory instance
-        """
+        """Initialize conversation memory for context retention."""
         return ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True,
@@ -63,12 +72,7 @@ class ResearchAgent:
         )
     
     def _setup_tools(self) -> list:
-        """
-        Create and configure tools for the agent to use.
-        
-        Returns:
-            list: List of Tool objects available to the agent
-        """
+        """Create and configure tools for the agent to use."""
         return [
             Tool(
                 name="WebSearch",
@@ -91,13 +95,7 @@ class ResearchAgent:
         ]
     
     def _setup_agent(self):
-        """
-        Initialize the LangChain agent with tools and configuration.
-        
-        Returns:
-            AgentExecutor: Configured agent instance
-        """
-        # System prompt to guide agent behavior
+        """Initialize the LangChain agent with tools and configuration."""
         system_message = SystemMessage(content=(
             "You are a professional research assistant. Your role is to:"
             "\n1. Use WebSearch to find relevant, recent information"
@@ -106,17 +104,15 @@ class ResearchAgent:
             "\n4. Provide comprehensive, well-structured reports"
             "\n5. Always cite your sources with URLs"
             "\n6. Be objective and factual in your analysis"
-            "\n7. Acknowledge limitations or conflicting information"
-            "\n\nFormat your final answer with clear sections, bullet points, and citations."
+            "\n\nFormat your final answer with clear sections and citations."
         ))
         
-        # Initialize the agent with tools and memory
         return initialize_agent(
             tools=self.tools,
             llm=self.llm,
             agent=AgentType.OPENAI_FUNCTIONS,
             memory=self.memory,
-            verbose=True,  # Show reasoning process
+            verbose=True,
             agent_kwargs={
                 'system_message': system_message,
             },
@@ -126,26 +122,14 @@ class ResearchAgent:
     def research(self, topic: str) -> Dict[str, Any]:
         """
         Perform comprehensive research on a given topic.
-        
-        Args:
-            topic (str): The research topic or question
-            
-        Returns:
-            Dict[str, Any]: Research results containing:
-                - topic: Original research topic
-                - report: Comprehensive research report
-                - sources: List of sources used
-                - timestamp: When research was conducted
         """
         try:
-            # Construct research prompt
             research_prompt = (
                 f"Please research the following topic and provide a comprehensive report: {topic}\n"
                 "Use web search to find recent information and read important articles. "
                 "Provide a well-structured report with key findings and citations."
             )
             
-            # Execute the research
             report = self.agent.run(research_prompt)
             
             return {
@@ -166,37 +150,17 @@ class ResearchAgent:
             }
     
     def _extract_sources(self, report: str) -> list:
-        """
-        Extract source URLs from the research report.
-        
-        Args:
-            report (str): The research report text
-            
-        Returns:
-            list: List of unique URLs found in the report
-        """
+        """Extract source URLs from the research report."""
         import re
-        # Simple URL extraction - can be enhanced with more sophisticated parsing
         url_pattern = r'https?://[^\s]+'
         urls = re.findall(url_pattern, report)
-        return list(set(urls))  # Return unique URLs
+        return list(set(urls))
     
     def _get_current_timestamp(self) -> str:
-        """
-        Get current timestamp in ISO format.
-        
-        Returns:
-            str: Current timestamp string
-        """
+        """Get current timestamp in ISO format."""
         from datetime import datetime
         return datetime.now().isoformat()
 
-# Convenience function for easy usage
 def create_research_agent() -> ResearchAgent:
-    """
-    Factory function to create a new ResearchAgent instance.
-    
-    Returns:
-        ResearchAgent: New ResearchAgent instance
-    """
+    """Factory function to create a new ResearchAgent instance."""
     return ResearchAgent()
