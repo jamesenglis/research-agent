@@ -1,0 +1,18 @@
+# Core dependencies - compatible versions
+langchain==0.1.14
+langchain-openai==0.0.8
+openai==1.23.2  # Specific compatible version
+
+# Web tools
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Development
+pytest==7.4.0
+black==23.7.0
+flake8==6.0.0
+
+# Additional dependencies
+python-dotenv==1.0.0
+tiktoken==0.5.2
